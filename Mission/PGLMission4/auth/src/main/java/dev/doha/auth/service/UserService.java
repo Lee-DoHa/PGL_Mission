@@ -1,5 +1,6 @@
 package dev.doha.auth.service;
 
+import dev.doha.auth.config.PasswordEncoderConfig;
 import dev.doha.auth.controller.dto.UserDto;
 import dev.doha.auth.entity.AreaEntity;
 import dev.doha.auth.entity.UserEntity;
@@ -8,36 +9,45 @@ import dev.doha.auth.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.StreamSupport;
 
 @Service
 public class UserService {
     private static final Logger logger = LoggerFactory.getLogger(UserService.class);
     private final UserRepository userRepository;
     private final AreaRepository areaRepository;
+    private final PasswordEncoder passwordEncoder;
+
 
     public UserService(
             UserRepository userRepository,
-            AreaRepository areaRepository
+            AreaRepository areaRepository,
+            PasswordEncoder passwordEncoder
     ) {
         this.userRepository = userRepository;
         this.areaRepository = areaRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public UserDto createUser(UserDto userDto){
-        Optional<AreaEntity> areaEntityOptional = this.areaRepository.findById(userDto.getAreaId());
+        Iterable<AreaEntity> allArea = this.areaRepository.findAll();
+        Optional<AreaEntity> areaEntityOptional = StreamSupport.stream(allArea.spliterator(), false)
+                .findAny();
+
         if (areaEntityOptional.isEmpty())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         AreaEntity residence = areaEntityOptional.get();
 
         UserEntity userEntity = new UserEntity();
         userEntity.setUsername(userDto.getUsername());
-        userEntity.setPassword(userDto.getPassword());
+        userEntity.setPassword(passwordEncoder.encode(userDto.getPassword()));
         userEntity.setShopOwner(userDto.getIsShopOwner());
         userEntity.setResidence(residence);
         userEntity = this.userRepository.save(userEntity);
@@ -71,10 +81,6 @@ public class UserService {
                 dto.getIsShopOwner() == null ? userEntity.getShopOwner() : dto.getIsShopOwner()
         );
 
-        Optional<AreaEntity> newArea = this.areaRepository.findById(
-                dto.getId() == null ? userEntity.getResidence().getId() : dto.getAreaId());
-
-        newArea.ifPresent(userEntity::setResidence);
         userRepository.save(userEntity);
     }
 
